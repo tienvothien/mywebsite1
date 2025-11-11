@@ -1,70 +1,71 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<title>Tra cứu Công văn / Văn bản</title>
-<style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; }
-    h1 { text-align: center; }
-    input { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  <meta charset="UTF-8">
+  <title>Tra cứu công văn / văn bản</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top:20px; }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #f3f3f3; }
-    tr:hover { background: #f9f9f9; }
-</style>
+    th { background: #f0f0f0; }
+    #searchBox { width: 300px; padding: 8px; }
+  </style>
 </head>
 <body>
+  <h1>Tra cứu công văn / văn bản</h1>
+  <input type="text" id="searchBox" placeholder="Nhập số hiệu, trích yếu hoặc cơ quan…" />
+  <button id="btnSearch">Tìm kiếm</button>
 
-<h1>Hệ thống tra cứu công văn / văn bản</h1>
-
-<input type="text" id="searchInput" placeholder="Nhập số hiệu, trích yếu, hoặc cơ quan ban hành để tìm...">
-
-<table id="docTable">
+  <table id="resultsTable">
     <thead>
-        <tr>
-            <th>Số hiệu</th>
-            <th>Ngày ban hành</th>
-            <th>Trích yếu</th>
-            <th>Cơ quan</th>
-            <th>File</th>
-        </tr>
+      <tr>
+        <th>Số hiệu</th>
+        <th>Ngày ban hành</th>
+        <th>Trích yếu</th>
+        <th>Cơ quan</th>
+        <th>PDF / Link</th>
+      </tr>
     </thead>
-    <tbody></tbody>
-</table>
+    <tbody>
+      <!-- Kết quả sẽ được thêm ở đây -->
+    </tbody>
+  </table>
 
-<script>
-async function loadData() {
-    const response = await fetch('data.csv');
-    const text = await response.text();
-    const rows = text.trim().split("\n").slice(1); // bỏ dòng tiêu đề
+  <script>
+    // Ví dụ dữ liệu mẫu – bạn sẽ thay bằng lấy từ Google Sheets hoặc API
+    const data = [
+      { so_hieu: "001/2025", ngay_ban_hanh: "2025-11-10", trich_yeu: "Về việc …", co_quan: "Sở A", link_pdf: "https://…" },
+      { so_hieu: "002/2025", ngay_ban_hanh: "2025-11-11", trich_yeu: "Thông báo …", co_quan: "Sở B", link_pdf: "https://…" }
+    ];
 
-    const tbody = document.querySelector("#docTable tbody");
-    tbody.innerHTML = "";
-
-    rows.forEach(row => {
-        const cols = row.split(",");
+    function renderResults(items) {
+      const tbody = document.getElementById("resultsTable").querySelector("tbody");
+      tbody.innerHTML = "";
+      items.forEach(item => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-            <td>${cols[0]}</td>
-            <td>${cols[1]}</td>
-            <td>${cols[2]}</td>
-            <td>${cols[3]}</td>
-            <td><a href="${cols[4]}" target="_blank">Xem PDF</a></td>
+          <td>${item.so_hieu}</td>
+          <td>${item.ngay_ban_hanh}</td>
+          <td>${item.trich_yeu}</td>
+          <td>${item.co_quan}</td>
+          <td><a href="${item.link_pdf}" target="_blank">Xem</a></td>
         `;
         tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("btnSearch").addEventListener("click", () => {
+      const q = document.getElementById("searchBox").value.toLowerCase();
+      const filtered = data.filter(item =>
+        item.so_hieu.toLowerCase().includes(q) ||
+        item.trich_yeu.toLowerCase().includes(q) ||
+        item.co_quan.toLowerCase().includes(q)
+      );
+      renderResults(filtered);
     });
-}
 
-document.getElementById("searchInput").addEventListener("keyup", function() {
-    const keyword = this.value.toLowerCase();
-    const rows = document.querySelectorAll("#docTable tbody tr");
-    rows.forEach(row => {
-        row.style.display = row.innerText.toLowerCase().includes(keyword) ? "" : "none";
-    });
-});
-
-loadData();
-</script>
-
+    // Khởi tạo hiển thị toàn bộ
+    renderResults(data);
+  </script>
 </body>
 </html>
