@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Thêm công văn / văn bản</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    form { max-width: 500px; }
+    label { display: block; margin-top: 10px; }
+    input, textarea { width: 100%; padding:8px; margin-top:4px; }
+    button { margin-top: 12px; padding: 10px 20px; }
+  </style>
+</head>
+<body>
+  <h1>Thêm công văn / văn bản</h1>
+  <form id="addForm">
+    <label>Số hiệu:
+      <input type="text" name="so_hieu" required />
+    </label>
+    <label>Ngày ban hành:
+      <input type="date" name="ngay_ban_hanh" required />
+    </label>
+    <label>Trích yếu:
+      <textarea name="trich_yeu" rows="3" required></textarea>
+    </label>
+    <label>Cơ quan:
+      <input type="text" name="co_quan" required />
+    </label>
+    <label>Link PDF:
+      <input type="url" name="link_pdf" required />
+    </label>
+    <button type="submit">Thêm mới</button>
+  </form>
+
+  <script>
+    document.getElementById("addForm").addEventListener("submit", event => {
+      event.preventDefault();
+      const form = event.target;
+      const data = {
+        so_hieu: form.so_hieu.value,
+        ngay_ban_hanh: form.ngay_ban_hanh.value,
+        trich_yeu: form.trich_yeu.value,
+        co_quan: form.co_quan.value,
+        link_pdf: form.link_pdf.value
+      };
+      console.log("Dữ liệu mới:", data);
+      alert("Đã thêm mới (chỉ giả lập). Bạn cần kết nối backend hoặc Google Sheets API để lưu dữ liệu thực.");
+      form.reset();
+    });
+  </script>
+</body>
+</html>
