@@ -1,10 +1,70 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Trang web của tôi</title>
+<meta charset="UTF-8">
+<title>Tra cứu Công văn / Văn bản</title>
+<style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; }
+    h1 { text-align: center; }
+    input { width: 100%; padding: 10px; margin-bottom: 15px; font-size: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #f3f3f3; }
+    tr:hover { background: #f9f9f9; }
+</style>
 </head>
 <body>
-  <h1>Xin chào! Đây là web chạy trên GitHub Pages 🎉</h1>
+
+<h1>Hệ thống tra cứu công văn / văn bản</h1>
+
+<input type="text" id="searchInput" placeholder="Nhập số hiệu, trích yếu, hoặc cơ quan ban hành để tìm...">
+
+<table id="docTable">
+    <thead>
+        <tr>
+            <th>Số hiệu</th>
+            <th>Ngày ban hành</th>
+            <th>Trích yếu</th>
+            <th>Cơ quan</th>
+            <th>File</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+async function loadData() {
+    const response = await fetch('data.csv');
+    const text = await response.text();
+    const rows = text.trim().split("\n").slice(1); // bỏ dòng tiêu đề
+
+    const tbody = document.querySelector("#docTable tbody");
+    tbody.innerHTML = "";
+
+    rows.forEach(row => {
+        const cols = row.split(",");
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>${cols[0]}</td>
+            <td>${cols[1]}</td>
+            <td>${cols[2]}</td>
+            <td>${cols[3]}</td>
+            <td><a href="${cols[4]}" target="_blank">Xem PDF</a></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+document.getElementById("searchInput").addEventListener("keyup", function() {
+    const keyword = this.value.toLowerCase();
+    const rows = document.querySelectorAll("#docTable tbody tr");
+    rows.forEach(row => {
+        row.style.display = row.innerText.toLowerCase().includes(keyword) ? "" : "none";
+    });
+});
+
+loadData();
+</script>
+
 </body>
 </html>
