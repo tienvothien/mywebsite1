@@ -1,71 +1,158 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>Tra cứu công văn / văn bản</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top:20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background: #f0f0f0; }
-    #searchBox { width: 300px; padding: 8px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Scan và Tải lên Google Drive</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f2f5; margin: 0; padding: 20px; }
+        .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
+        #video { width: 100%; max-height: 450px; background-color: #000; border: 2px solid #ccc; border-radius: 4px; }
+        .controls { margin-top: 15px; display: flex; justify-content: center; gap: 10px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; transition: background-color 0.3s; }
+        #snap-button { background-color: #007bff; color: white; }
+        #snap-button:hover { background-color: #0056b3; }
+        #status-message { margin-top: 15px; font-weight: bold; }
+        #preview { margin-top: 20px; text-align: center; }
+        #preview-img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; display: none; }
+    </style>
 </head>
 <body>
-  <h1>Tra cứu công văn / văn bản</h1>
-  <input type="text" id="searchBox" placeholder="Nhập số hiệu, trích yếu hoặc cơ quan…" />
-  <button id="btnSearch">Tìm kiếm</button>
+    <div class="container">
+        <h2>📷 Trình Scan File Bằng Camera</h2>
+        
+        <video id="video" autoplay playsinline></video>
+        
+        <div class="controls">
+            <button id="snap-button">1. Chụp Ảnh</button>
+            <button id="upload-button" disabled style="background-color: #28a745; color: white;">2. Tải lên Drive</button>
+        </div>
+        
+        <p id="status-message">Đang chờ kích hoạt camera...</p>
+        <div id="preview">
+            <h3>Ảnh Xem Trước:</h3>
+            <img id="preview-img" alt="Ảnh đã chụp">
+        </div>
+        
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
 
-  <table id="resultsTable">
-    <thead>
-      <tr>
-        <th>Số hiệu</th>
-        <th>Ngày ban hành</th>
-        <th>Trích yếu</th>
-        <th>Cơ quan</th>
-        <th>PDF / Link</th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- Kết quả sẽ được thêm ở đây -->
-    </tbody>
-  </table>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const snapButton = document.getElementById('snap-button');
+        const uploadButton = document.getElementById('upload-button');
+        const previewImg = document.getElementById('preview-img');
+        const statusMessage = document.getElementById('status-message');
+        let capturedImageDataURL = null; // Biến lưu trữ ảnh đã chụp
+        
+        // --- Cấu hình Backend API ---
+        // !!! Cần thay thế bằng URL của Backend Server của bạn (ví dụ: https://my-upload-server.render.com)
+        const UPLOAD_API_ENDPOINT = 'http://localhost:3000/upload-to-drive'; 
+        
+        /**
+         * 1. Kích hoạt Camera bằng WebRTC
+         */
+        function startCamera() {
+            // Yêu cầu camera sau (environment) trên thiết bị di động
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+            })
+            .then(stream => {
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    statusMessage.textContent = "Camera đã sẵn sàng. Hãy chụp ảnh!";
+                };
+            })
+            .catch(err => {
+                console.error("Lỗi truy cập camera: ", err);
+                statusMessage.innerHTML = '❌ Lỗi: Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập và thử lại.<br>(' + err.name + ')';
+                snapButton.disabled = true;
+            });
+        }
 
-  <script>
-    // Ví dụ dữ liệu mẫu – bạn sẽ thay bằng lấy từ Google Sheets hoặc API
-    const data = [
-      { so_hieu: "001/2025", ngay_ban_hanh: "2025-11-10", trich_yeu: "Về việc …", co_quan: "Sở A", link_pdf: "https://…" },
-      { so_hieu: "002/2025", ngay_ban_hanh: "2025-11-11", trich_yeu: "Thông báo …", co_quan: "Sở B", link_pdf: "https://…" }
-    ];
+        /**
+         * 2. Chụp và Hiển thị Ảnh
+         */
+        snapButton.addEventListener('click', () => {
+            if (!video.srcObject) {
+                statusMessage.textContent = "Camera chưa sẵn sàng.";
+                return;
+            }
+            
+            // Đặt kích thước canvas bằng kích thước thực của video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const context = canvas.getContext('2d');
+            
+            // Vẽ khung hình hiện tại của video lên canvas
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // TẠM THỜI: Xử lý scan cơ bản (ví dụ: chuyển sang grayscale)
+            // (Trong dự án thực tế, sinh viên nên dùng thư viện như OpenCV.js để cắt, sửa góc)
+            // const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            // applyGrayscaleFilter(imageData); // Hàm này cần được tự định nghĩa
+            // context.putImageData(imageData, 0, 0);
 
-    function renderResults(items) {
-      const tbody = document.getElementById("resultsTable").querySelector("tbody");
-      tbody.innerHTML = "";
-      items.forEach(item => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>${item.so_hieu}</td>
-          <td>${item.ngay_ban_hanh}</td>
-          <td>${item.trich_yeu}</td>
-          <td>${item.co_quan}</td>
-          <td><a href="${item.link_pdf}" target="_blank">Xem</a></td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
+            // Lấy dữ liệu ảnh JPEG chất lượng cao
+            capturedImageDataURL = canvas.toDataURL('image/jpeg', 0.9); 
+            
+            // Hiển thị ảnh xem trước
+            previewImg.src = capturedImageDataURL;
+            previewImg.style.display = 'block';
+            statusMessage.textContent = "Ảnh đã chụp. Bạn có thể Tải lên Drive.";
+            uploadButton.disabled = false; // Kích hoạt nút Tải lên
+        });
 
-    document.getElementById("btnSearch").addEventListener("click", () => {
-      const q = document.getElementById("searchBox").value.toLowerCase();
-      const filtered = data.filter(item =>
-        item.so_hieu.toLowerCase().includes(q) ||
-        item.trich_yeu.toLowerCase().includes(q) ||
-        item.co_quan.toLowerCase().includes(q)
-      );
-      renderResults(filtered);
-    });
+        /**
+         * 3. Gửi Ảnh lên Backend để Lưu vào Google Drive
+         */
+        uploadButton.addEventListener('click', async () => {
+            if (!capturedImageDataURL) {
+                statusMessage.textContent = "Vui lòng chụp ảnh trước.";
+                return;
+            }
+            
+            uploadButton.disabled = true;
+            uploadButton.textContent = 'Đang tải lên...';
+            statusMessage.textContent = "Đang gửi ảnh đến máy chủ...";
+            
+            // Tách phần data Base64 ra khỏi tiền tố 'data:image/jpeg;base64,'
+            const base64Data = capturedImageDataURL.split(',')[1];
+            
+            try {
+                const response = await fetch(UPLOAD_API_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        imageData: base64Data, // Chỉ gửi Base64 Data
+                        fileName: `scan_${new Date().toISOString()}.jpeg`
+                    }),
+                });
 
-    // Khởi tạo hiển thị toàn bộ
-    renderResults(data);
-  </script>
+                const result = await response.json();
+
+                if (response.ok) {
+                    statusMessage.innerHTML = `✅ **Tải lên thành công!** ID Drive: ${result.fileId}`;
+                    console.log("File uploaded:", result);
+                } else {
+                    statusMessage.innerHTML = `❌ **Lỗi Tải lên:** ${result.error || response.statusText}`;
+                }
+            } catch (error) {
+                console.error('Lỗi kết nối Backend:', error);
+                statusMessage.innerHTML = '❌ **Lỗi Kết nối:** Không thể kết nối đến máy chủ Backend.';
+            } finally {
+                uploadButton.disabled = false;
+                uploadButton.textContent = '2. Tải lên Drive';
+            }
+        });
+
+        // Khởi động camera khi trang được tải
+        startCamera();
+    </script>
 </body>
 </html>
