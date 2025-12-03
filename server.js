@@ -9,11 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-// Giới hạn payload lớn (50MB) để nhận mảng ảnh Base64
 app.use(bodyParser.json({ limit: '50mb' })); 
-
 app.use((req, res, next) => {
-    // Cấu hình CORS: Cho phép Frontend (GitHub Pages) truy cập
     res.header('Access-Control-Allow-Origin', '*'); 
     res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
@@ -24,11 +21,16 @@ app.use((req, res, next) => {
 });
 
 // --- Cấu Hình Xác Thực GOOGLE DRIVE ---
-// LƯU Ý: Các biến này phải được đặt trong Environment Variables (Biến Môi Trường) của hosting
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN; 
-const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || 'ROOT'; // ID thư mục mặc định
+
+// !!! ID THƯ MỤC GOOGLE DRIVE CỦA BẠN !!!
+// ID: 1ZL2tNkImIy7qHAeKS7UEcSYfVDLTEBGG
+// Ta sẽ dùng ID này làm mặc định (hoặc đọc từ biến môi trường nếu có)
+const YOUR_DRIVE_FOLDER_ID = '1ZL2tNkImIy7qHAeKS7UEcSYfVDLTEBGG';
+const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || YOUR_DRIVE_FOLDER_ID;
+
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
     console.error("LỖI CẤU HÌNH: Thiếu biến môi trường quan trọng.");
@@ -53,7 +55,6 @@ app.post('/upload-pdf', async (req, res) => {
     const pdfDoc = new PDFDocument({ autoFirstPage: false }); 
     const pdfBuffers = [];
 
-    // Lắng nghe sự kiện để thu thập Buffer khi PDF được sinh ra
     pdfDoc.on('data', chunk => pdfBuffers.push(chunk));
     
     // Xử lý hoàn tất việc tạo PDF và tải lên Drive
@@ -62,13 +63,15 @@ app.post('/upload-pdf', async (req, res) => {
             const pdfFileBuffer = Buffer.concat(pdfBuffers);
             
             // --- BƯỚC 2: TẢI FILE PDF LÊN GOOGLE DRIVE ---
-            const fileName = `${sessionName}.pdf`;
+            
+            // Đặt tên file theo định dạng: ScanPDF_YYYYMMDD_HHMMSS.pdf
+            const fileName = `${sessionName}.pdf`; 
 
             const response = await drive.files.create({
                 requestBody: {
                     name: fileName,
                     mimeType: 'application/pdf',
-                    parents: [DRIVE_FOLDER_ID] 
+                    parents: [DRIVE_FOLDER_ID] // Sử dụng ID thư mục của bạn
                 },
                 media: {
                     mimeType: 'application/pdf',
@@ -79,7 +82,7 @@ app.post('/upload-pdf', async (req, res) => {
             res.status(200).json({ 
                 message: `Tạo và tải lên 1 file PDF (${pages.length} trang) thành công.`, 
                 fileId: response.data.id,
-                fileName: response.data.name 
+                fileName: fileName // Gửi tên file về Frontend để xác nhận
             });
 
         } catch (error) {
@@ -97,13 +100,11 @@ app.post('/upload-pdf', async (req, res) => {
             margin: 0 
         });
         
-        // Chèn ảnh đã scan (đã được duỗi thẳng A4 ở Frontend) vào trang PDF A4
         pdfDoc.image(imageBuffer, 0, 0, { 
             fit: [pdfDoc.page.width, pdfDoc.page.height],
             align: 'center', 
             valign: 'center' 
         });
-        console.log(`Đã thêm Trang ${index + 1} vào PDF.`);
     });
 
     // Kết thúc việc tạo file PDF
