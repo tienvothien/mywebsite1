@@ -11,7 +11,7 @@
         body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f2f5; margin: 0; padding: 20px; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
         #videoElement { width: 100%; max-height: 450px; background-color: #000; border: 2px solid #ccc; border-radius: 4px; }
-        #canvasElement { display: none; } /* Ẩn canvas thô */
+        #canvasElement { display: none; }
         .controls { margin-top: 15px; display: flex; justify-content: center; gap: 10px; }
         button { padding: 10px 15px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; transition: background-color 0.3s; }
         #scanButton { background-color: #007bff; color: white; }
@@ -45,8 +45,8 @@
         const statusMessage = document.getElementById('statusMessage');
         const counter = document.getElementById('counter');
 
-        let scannedPages = []; // Mảng lưu trữ Base64 data của các trang đã quét
-        let cvReady = false; // Trạng thái sẵn sàng của OpenCV
+        let scannedPages = []; 
+        let cvReady = false; 
 
         // --- Cấu hình Backend API ---
         // !!! THAY THẾ bằng URL server của bạn sau khi triển khai server.js (ví dụ: https://my-scan-server.onrender.com)
@@ -86,16 +86,13 @@
             scanButton.textContent = 'Đang xử lý...';
             statusMessage.textContent = 'Đang tiến hành quét và duỗi thẳng tài liệu A4...';
 
-            // 1. Chụp ảnh từ video lên canvas
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
             try {
-                // 2. Gọi hàm xử lý ảnh OpenCV.js (Chi tiết hàm nằm dưới)
                 await scanDocumentA4(canvas);
                 
-                // 3. Lấy Base64 Data của ảnh đã quét B&W (Đã được duỗi thẳng A4)
                 const base64Data = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
                 scannedPages.push(base64Data);
                 
@@ -116,25 +113,18 @@
             }
         }
         
-        /**
-         * HÀM XỬ LÝ ẢNH CHUYÊN SÂU BẰNG OPENCV.JS
-         * NOTE: Để chạy hoàn chỉnh, sinh viên cần điền logic tìm 4 góc (BƯỚC 1)
-         * Hiện tại, nó chỉ thực hiện Perspective Transform dựa trên 4 góc canvas (không chính xác nếu chụp nghiêng)
-         */
+        // --- HÀM XỬ LÝ ẢNH BẰNG OPENCV.JS ---
         async function scanDocumentA4(canvas) {
             let src = cv.imread(canvas);
             let dst = new cv.Mat();
             
-            // --- BƯỚC 1: Tìm 4 góc tài liệu (Cần sinh viên tự triển khai Canny, findContours, approxPolyDP) ---
-            
+            // Tạm thời dùng 4 góc canvas:
             let width = src.cols;
             let height = src.rows;
-            // Tạm thời dùng 4 góc canvas:
             let src_pts = [
-                width, 0, 0, 0, 0, height, width, height // x1,y1, x2,y2, x3,y3, x4,y4
+                width, 0, 0, 0, 0, height, width, height 
             ]; 
 
-            // --- BƯỚC 2: Định nghĩa kích thước đầu ra theo Tỷ lệ A4 ---
             const A4_RATIO = Math.sqrt(2); 
             const TARGET_WIDTH = 1000; 
             const TARGET_HEIGHT = Math.round(TARGET_WIDTH * A4_RATIO); 
@@ -144,7 +134,6 @@
                 0, TARGET_HEIGHT, TARGET_WIDTH, TARGET_HEIGHT 
             ];
 
-            // --- BƯỚC 3: Biến đổi Phối cảnh (Perspective Transform) ---
             let M = cv.getPerspectiveTransform(
                 cv.matFromArray(4, 1, cv.CV_32FC2, src_pts), 
                 cv.matFromArray(4, 1, cv.CV_32FC2, dst_pts) 
@@ -152,14 +141,11 @@
             
             cv.warpPerspective(src, dst, M, new cv.Size(TARGET_WIDTH, TARGET_HEIGHT));
 
-            // --- BƯỚC 4: Lọc ảnh "Scan" (Black & White) ---
             cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0); 
             cv.adaptiveThreshold(dst, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
 
-            // --- BƯỚC 5: Hiển thị kết quả lên Canvas ---
             cv.imshow(canvas, dst);
             
-            // Dọn dẹp bộ nhớ
             src.delete(); 
             dst.delete(); 
             M.delete();
@@ -174,21 +160,25 @@
             uploadButton.textContent = `Đang tải lên ${scannedPages.length} trang...`;
             statusMessage.textContent = "Đang gửi ảnh đến máy chủ để kết xuất PDF và tải lên Drive...";
             
+            // TẠO TÊN FILE DỄ DÀNG KIỂM TRA TRÊN DRIVE (Ví dụ: ScanPDF_20251203_180000)
+            const now = new Date();
+            const sessionName = `ScanPDF_${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
+            
             try {
                 const response = await fetch(UPLOAD_API_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        pages: scannedPages, // Mảng ảnh Base64
-                        sessionName: `ScanPDF_${new Date().toISOString().slice(0, 19).replace('T', '_')}`
+                        pages: scannedPages, 
+                        sessionName: sessionName // Gửi tên file cơ sở
                     }),
                 });
 
                 const result = await response.json();
 
                 if (response.ok) {
-                    statusMessage.innerHTML = `✅ **Tải lên PDF thành công!** File ID: ${result.fileId}`;
-                    scannedPages = []; // Reset sau khi thành công
+                    statusMessage.innerHTML = `✅ **Tải lên PDF thành công!** Tên file: <b>${result.fileName}</b>`;
+                    scannedPages = []; 
                     counter.textContent = "Đã quét: 0 trang";
                     uploadButton.style.display = 'none';
                     scanButton.textContent = 'Quét Trang Đầu Tiên';
@@ -202,6 +192,10 @@
                 uploadButton.disabled = false;
             }
         });
+        
+        // Khởi động camera khi trang được tải
+        // (Nếu OpenCV.js tải xong trước, nó sẽ gọi startCamera)
+        if (cvReady) startCamera(); 
     </script>
 </body>
 </html>
