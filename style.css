@@ -1,8 +1,0 @@
-body { max-width: 800px; margin: 40px auto; font-family: Arial; }
-input, button { width: 100%; padding: 10px; margin: 6px 0; font-size: 16px; }
-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-th, td { border: 1px solid #ccc; padding: 8px; }
-th { background: #e7f0ff; }
-tr:hover { background: #f5faff; }
-button { background: #0066ff; color: white; border: none; cursor: pointer; }
-button:hover { background: #004ecc; }
