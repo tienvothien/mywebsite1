@@ -3,58 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Scan và Tải lên Google Drive</title>
+    <title>Web Scan Tài Liệu A4 (PDF Multi-page)</title>
+    
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady()"></script>
+    
     <style>
         body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f2f5; margin: 0; padding: 20px; }
         .container { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 600px; }
-        #video { width: 100%; max-height: 450px; background-color: #000; border: 2px solid #ccc; border-radius: 4px; }
+        #videoElement { width: 100%; max-height: 450px; background-color: #000; border: 2px solid #ccc; border-radius: 4px; }
+        #canvasElement { display: none; } /* Ẩn canvas thô */
         .controls { margin-top: 15px; display: flex; justify-content: center; gap: 10px; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; transition: background-color 0.3s; }
-        #snap-button { background-color: #007bff; color: white; }
-        #snap-button:hover { background-color: #0056b3; }
-        #status-message { margin-top: 15px; font-weight: bold; }
-        #preview { margin-top: 20px; text-align: center; }
-        #preview-img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; display: none; }
+        button { padding: 10px 15px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; transition: background-color 0.3s; }
+        #scanButton { background-color: #007bff; color: white; }
+        #uploadButton { background-color: #28a745; color: white; }
+        #statusMessage { margin-top: 15px; font-weight: bold; }
+        #counter { margin-top: 10px; font-size: 1.1em; color: #333; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>📷 Trình Scan File Bằng Camera</h2>
+        <h2>📄 Web Scan Tài Liệu A4</h2>
         
-        <video id="video" autoplay playsinline></video>
+        <video id="videoElement" autoplay playsinline></video>
         
         <div class="controls">
-            <button id="snap-button">1. Chụp Ảnh</button>
-            <button id="upload-button" disabled style="background-color: #28a745; color: white;">2. Tải lên Drive</button>
+            <button id="scanButton" disabled>Quét Trang Đầu Tiên</button>
+            <button id="uploadButton" style="display:none;" disabled>Tải lên (0 Trang)</button>
         </div>
         
-        <p id="status-message">Đang chờ kích hoạt camera...</p>
-        <div id="preview">
-            <h3>Ảnh Xem Trước:</h3>
-            <img id="preview-img" alt="Ảnh đã chụp">
-        </div>
+        <p id="counter">Đã quét: 0 trang</p>
+        <p id="statusMessage">Đang tải thư viện...</p>
         
-        <canvas id="canvas" style="display:none;"></canvas>
+        <canvas id="canvasElement" style="display:none;"></canvas>
     </div>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const snapButton = document.getElementById('snap-button');
-        const uploadButton = document.getElementById('upload-button');
-        const previewImg = document.getElementById('preview-img');
-        const statusMessage = document.getElementById('status-message');
-        let capturedImageDataURL = null; // Biến lưu trữ ảnh đã chụp
-        
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const scanButton = document.getElementById('scanButton');
+        const uploadButton = document.getElementById('uploadButton');
+        const statusMessage = document.getElementById('statusMessage');
+        const counter = document.getElementById('counter');
+
+        let scannedPages = []; // Mảng lưu trữ Base64 data của các trang đã quét
+        let cvReady = false; // Trạng thái sẵn sàng của OpenCV
+
         // --- Cấu hình Backend API ---
-        // !!! Cần thay thế bằng URL của Backend Server của bạn (ví dụ: https://my-upload-server.render.com)
-        const UPLOAD_API_ENDPOINT = 'http://localhost:3000/upload-to-drive'; 
+        // !!! THAY THẾ bằng URL server của bạn sau khi triển khai server.js (ví dụ: https://my-scan-server.onrender.com)
+        const UPLOAD_API_ENDPOINT = 'http://localhost:3000/upload-pdf'; 
         
-        /**
-         * 1. Kích hoạt Camera bằng WebRTC
-         */
+        // --- LOGIC KHỞI TẠO ---
+        function onOpenCvReady() {
+            cvReady = true;
+            statusMessage.textContent = "✅ Thư viện sẵn sàng. Đang kích hoạt camera...";
+            startCamera();
+        }
+
         function startCamera() {
-            // Yêu cầu camera sau (environment) trên thiết bị di động
             navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: "environment" } 
             })
@@ -62,97 +67,141 @@
                 video.srcObject = stream;
                 video.onloadedmetadata = () => {
                     video.play();
-                    statusMessage.textContent = "Camera đã sẵn sàng. Hãy chụp ảnh!";
+                    statusMessage.textContent = "Camera đã sẵn sàng. Hãy đặt tài liệu A4 vào khung hình.";
+                    scanButton.disabled = false;
                 };
             })
             .catch(err => {
-                console.error("Lỗi truy cập camera: ", err);
-                statusMessage.innerHTML = '❌ Lỗi: Không thể truy cập camera. Vui lòng kiểm tra quyền truy cập và thử lại.<br>(' + err.name + ')';
-                snapButton.disabled = true;
+                statusMessage.innerHTML = '❌ Lỗi Camera: Vui lòng kiểm tra quyền truy cập.<br>(' + err.name + ')';
             });
         }
+        
+        // --- LOGIC SCAN (Tích hợp OpenCV) ---
+        scanButton.addEventListener('click', scanDocument);
 
-        /**
-         * 2. Chụp và Hiển thị Ảnh
-         */
-        snapButton.addEventListener('click', () => {
-            if (!video.srcObject) {
-                statusMessage.textContent = "Camera chưa sẵn sàng.";
-                return;
-            }
+        async function scanDocument() {
+            if (!cvReady || !video.srcObject) return;
             
-            // Đặt kích thước canvas bằng kích thước thực của video
+            scanButton.disabled = true;
+            scanButton.textContent = 'Đang xử lý...';
+            statusMessage.textContent = 'Đang tiến hành quét và duỗi thẳng tài liệu A4...';
+
+            // 1. Chụp ảnh từ video lên canvas
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            
-            const context = canvas.getContext('2d');
-            
-            // Vẽ khung hình hiện tại của video lên canvas
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            // TẠM THỜI: Xử lý scan cơ bản (ví dụ: chuyển sang grayscale)
-            // (Trong dự án thực tế, sinh viên nên dùng thư viện như OpenCV.js để cắt, sửa góc)
-            // const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            // applyGrayscaleFilter(imageData); // Hàm này cần được tự định nghĩa
-            // context.putImageData(imageData, 0, 0);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Lấy dữ liệu ảnh JPEG chất lượng cao
-            capturedImageDataURL = canvas.toDataURL('image/jpeg', 0.9); 
-            
-            // Hiển thị ảnh xem trước
-            previewImg.src = capturedImageDataURL;
-            previewImg.style.display = 'block';
-            statusMessage.textContent = "Ảnh đã chụp. Bạn có thể Tải lên Drive.";
-            uploadButton.disabled = false; // Kích hoạt nút Tải lên
-        });
+            try {
+                // 2. Gọi hàm xử lý ảnh OpenCV.js (Chi tiết hàm nằm dưới)
+                await scanDocumentA4(canvas);
+                
+                // 3. Lấy Base64 Data của ảnh đã quét B&W (Đã được duỗi thẳng A4)
+                const base64Data = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+                scannedPages.push(base64Data);
+                
+                // 4. Cập nhật UI
+                counter.textContent = `Đã quét: ${scannedPages.length} trang`;
+                statusMessage.textContent = `✅ Quét Trang ${scannedPages.length} thành công. Thay trang và quét tiếp.`;
+                scanButton.textContent = 'Quét Trang Tiếp Theo';
+                
+                uploadButton.style.display = 'block';
+                uploadButton.disabled = false;
+                uploadButton.textContent = `Tải lên (${scannedPages.length} Trang) & Kết xuất PDF`;
 
-        /**
-         * 3. Gửi Ảnh lên Backend để Lưu vào Google Drive
-         */
-        uploadButton.addEventListener('click', async () => {
-            if (!capturedImageDataURL) {
-                statusMessage.textContent = "Vui lòng chụp ảnh trước.";
-                return;
+            } catch (error) {
+                statusMessage.textContent = '❌ Lỗi quét ảnh. Vui lòng thử lại.';
+                console.error("Scanning Error:", error);
+            } finally {
+                scanButton.disabled = false;
             }
+        }
+        
+        /**
+         * HÀM XỬ LÝ ẢNH CHUYÊN SÂU BẰNG OPENCV.JS
+         * NOTE: Để chạy hoàn chỉnh, sinh viên cần điền logic tìm 4 góc (BƯỚC 1)
+         * Hiện tại, nó chỉ thực hiện Perspective Transform dựa trên 4 góc canvas (không chính xác nếu chụp nghiêng)
+         */
+        async function scanDocumentA4(canvas) {
+            let src = cv.imread(canvas);
+            let dst = new cv.Mat();
+            
+            // --- BƯỚC 1: Tìm 4 góc tài liệu (Cần sinh viên tự triển khai Canny, findContours, approxPolyDP) ---
+            
+            let width = src.cols;
+            let height = src.rows;
+            // Tạm thời dùng 4 góc canvas:
+            let src_pts = [
+                width, 0, 0, 0, 0, height, width, height // x1,y1, x2,y2, x3,y3, x4,y4
+            ]; 
+
+            // --- BƯỚC 2: Định nghĩa kích thước đầu ra theo Tỷ lệ A4 ---
+            const A4_RATIO = Math.sqrt(2); 
+            const TARGET_WIDTH = 1000; 
+            const TARGET_HEIGHT = Math.round(TARGET_WIDTH * A4_RATIO); 
+
+            let dst_pts = [
+                0, 0, TARGET_WIDTH, 0, 
+                0, TARGET_HEIGHT, TARGET_WIDTH, TARGET_HEIGHT 
+            ];
+
+            // --- BƯỚC 3: Biến đổi Phối cảnh (Perspective Transform) ---
+            let M = cv.getPerspectiveTransform(
+                cv.matFromArray(4, 1, cv.CV_32FC2, src_pts), 
+                cv.matFromArray(4, 1, cv.CV_32FC2, dst_pts) 
+            );
+            
+            cv.warpPerspective(src, dst, M, new cv.Size(TARGET_WIDTH, TARGET_HEIGHT));
+
+            // --- BƯỚC 4: Lọc ảnh "Scan" (Black & White) ---
+            cv.cvtColor(dst, dst, cv.COLOR_RGBA2GRAY, 0); 
+            cv.adaptiveThreshold(dst, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+
+            // --- BƯỚC 5: Hiển thị kết quả lên Canvas ---
+            cv.imshow(canvas, dst);
+            
+            // Dọn dẹp bộ nhớ
+            src.delete(); 
+            dst.delete(); 
+            M.delete();
+        }
+
+
+        // --- LOGIC UPLOAD PDF ---
+        uploadButton.addEventListener('click', async () => {
+            if (scannedPages.length === 0) return;
             
             uploadButton.disabled = true;
-            uploadButton.textContent = 'Đang tải lên...';
-            statusMessage.textContent = "Đang gửi ảnh đến máy chủ...";
-            
-            // Tách phần data Base64 ra khỏi tiền tố 'data:image/jpeg;base64,'
-            const base64Data = capturedImageDataURL.split(',')[1];
+            uploadButton.textContent = `Đang tải lên ${scannedPages.length} trang...`;
+            statusMessage.textContent = "Đang gửi ảnh đến máy chủ để kết xuất PDF và tải lên Drive...";
             
             try {
                 const response = await fetch(UPLOAD_API_ENDPOINT, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        imageData: base64Data, // Chỉ gửi Base64 Data
-                        fileName: `scan_${new Date().toISOString()}.jpeg`
+                        pages: scannedPages, // Mảng ảnh Base64
+                        sessionName: `ScanPDF_${new Date().toISOString().slice(0, 19).replace('T', '_')}`
                     }),
                 });
 
                 const result = await response.json();
 
                 if (response.ok) {
-                    statusMessage.innerHTML = `✅ **Tải lên thành công!** ID Drive: ${result.fileId}`;
-                    console.log("File uploaded:", result);
+                    statusMessage.innerHTML = `✅ **Tải lên PDF thành công!** File ID: ${result.fileId}`;
+                    scannedPages = []; // Reset sau khi thành công
+                    counter.textContent = "Đã quét: 0 trang";
+                    uploadButton.style.display = 'none';
+                    scanButton.textContent = 'Quét Trang Đầu Tiên';
                 } else {
-                    statusMessage.innerHTML = `❌ **Lỗi Tải lên:** ${result.error || response.statusText}`;
+                    statusMessage.innerHTML = `❌ **Lỗi Tải lên PDF:** ${result.error || response.statusText}`;
                 }
             } catch (error) {
                 console.error('Lỗi kết nối Backend:', error);
                 statusMessage.innerHTML = '❌ **Lỗi Kết nối:** Không thể kết nối đến máy chủ Backend.';
             } finally {
                 uploadButton.disabled = false;
-                uploadButton.textContent = '2. Tải lên Drive';
             }
         });
-
-        // Khởi động camera khi trang được tải
-        startCamera();
     </script>
 </body>
 </html>
